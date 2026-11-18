@@ -1,0 +1,47 @@
+name: Build APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      alamat:
+        description: "Alamat web ujian, contoh: https://nama.netlify.app"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      ALAMAT: ${{ inputs.alamat }}
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Ambil sumber proyek dari web ujian
+        run: |
+          BASE="${ALAMAT%/}"
+          curl -fsSL "$BASE/apk-src.zip" -o src.zip
+          unzip -q src.zip -d proyek
+          sed -i "s|GANTI_ALAMAT|$BASE/|" proyek/app/src/main/res/values/alamat.xml
+
+      - name: Build APK
+        working-directory: proyek
+        run: gradle assembleDebug --no-daemon
+
+      - name: Terbitkan APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp proyek/app/build/outputs/apk/debug/app-debug.apk ujian-mi.apk
+          gh release create "apk-${{ github.run_number }}" ujian-mi.apk \
+            --repo "${{ github.repository }}" \
+            --title "APK Ujian MI nomor ${{ github.run_number }}" \
+            --notes "Unduh ujian-mi.apk lalu pasang di HP."
